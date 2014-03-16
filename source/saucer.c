@@ -20,8 +20,8 @@
 #define ROCKET "^"		/* The Rocket String*/
 #define TURRET "|"		/* The Turret String*/
 #define	TUNIT   20000		/* timeunits in microseconds */
-#define MAXSAUCERS 500		/* An Obsurdly large max saucer count*/
-#define MAXROCKETS 500		/* The maximum number of in flight rockets*/
+#define MAXSAUCERS 20		/* An Obsurdly large max saucer count*/
+#define MAXROCKETS 500		/* The maximum number of in flight rockets */
 
 struct	saucer{
 		char	*str;	/* the message */
@@ -40,69 +40,78 @@ struct rocket{
 	int alive;	/*Indicates if thie rocket is alive*/
 };
 
-pthread_mutex_t mx = PTHREAD_MUTEX_INITIALIZER;
+pthread_t      pSaucers[MAXSAUCERS];	/* The saucer threads		*/
+pthread_t      pRockets[MAXROCKETS];	/* The rocket threds		*/
+struct saucer sProps[MAXSAUCERS];	/* Properties of Saucers	*/
+struct rocket rProps[MAXROCKETS];	/* Properties of Rockets	*/
+pthread_t	spawnSaucer;
 
+/*LOCKS*/
+/*-------------------------------------------------------------------*/
+/*ALWAYS attempt to access them in the order they appear here to
+* avoid race conditions */
+/*-------------------------------------------------------------------*/
+/*Lock used for locking curses access */
+pthread_mutex_t mx = PTHREAD_MUTEX_INITIALIZER;
+/*Lock used for accessing any of the saucer data structures*/
+pthread_mutex_t saucers = PTHREAD_MUTEX_INITIALIZER; 
+
+/**
+* Function prototypes
+*/
+void resetSaucer(struct saucer * saucer);
+void resetRocket(struct rocket * rocket);
+void	       *animateSaucer();
+void	       *saucerSpawn();
+
+/**
+* Main!
+*/
 int main(int ac, char *av[])
 {
 	int	       c;			/* user input			*/
-	pthread_t      pSaucers[MAXSAUCERS];	/* The saucer threads		*/
-	pthread_t      pRockets[MAXROCKETS];	/* The rocket threds		*/
-	struct saucer sProps[MAXSAUCERS];	/* Properties of Saucers	*/
-	struct rocket rProps[MAXROCKETS];	/* Properties of Rockets	*/
-	void	       *animate();		/* the function			*/
-	int	       num_msg ;		/* number of strings		*/
+	void	       *animateSaucer();		/* the function			*/
 	int	     i;
-
-	/*
-	if ( ac == 1 ){
-		printf("usage: tanimate string ..\n"); 
-		exit(1);
-	}
-	*/
 
 	setup();
 
 	/* create all the threads */
+	/*
 	for(i=0 ; i<num_msg; i++)
 		if ( pthread_create(&thrds[i], NULL, animate, &props[i])){
 			fprintf(stderr,"error creating thread");
 			endwin();
 			exit(0);
 		}
+	*/
 
+	pthread_create(&spawnSaucer, NULL, saucerSpawn, NULL);
 	/* process user input */
 	while(1) {
 		c = getch();
 		if ( c == 'Q' ) break;
-		if ( c == ' ' )
-			for(i=0;i<num_msg;i++)
-				props[i].dir = -props[i].dir;
-		if ( c >= '0' && c <= '9' ){
-			i = c - '0';
-			if ( i < num_msg )
-				props[i].dir = -props[i].dir;
 		}
-	}
 
 	/* cancel all the threads */
 	pthread_mutex_lock(&mx);
-	for (i=0; i<num_msg; i++ )
-		pthread_cancel(thrds[i]);
+	for (i=0; i<MAXSAUCERS; i++ )
+		pthread_cancel(pSaucers[i]);
 	endwin();
 	return 0;
 }
-
+/**
+* Game set-up
+*/
 int setup()
 {
-
-
+	int i;
 	/*reset all saucers to default*/
 	for(i=0; i < MAXSAUCERS; i++){
-		resetSaucer(sProps[i]);
+		resetSaucer(&sProps[i]);
 	}
 	/*reset all rocklets to default*/
 	for(i=0; i < MAXROCKETS; i++){
-		resetRocket(rProps[i]);
+		resetRocket(&rProps[i]);
 	}
 	/* set up curses */
 	initscr();
@@ -111,17 +120,22 @@ int setup()
 	clear();
 //	mvprintw(LINES-1,0,"'Q' to quit, '0'..'%d' to bounce",num_msg-1);
 }
-/*Sets a saucer struct to default settings*/
+/**
+* Sets a saucer struct to default settings
+*/
 void resetSaucer(struct saucer * saucer){
 	saucer->str = SAUCER;
 	srand(time(NULL));
-	saucer->row = (rand()%6);
+	saucer->row = (rand()%10);
 	srand(time(NULL));
-	saucer->delay = 1+(rand()%15);
-	sacuer->dir = 1
+	//saucer->delay = 5+(rand()%10);
+	saucer->delay = 2;
+	saucer->dir = 1;
 	saucer->alive = -1;
 }
-/*Sets a rocket struct to default settings*/
+/**
+* Sets a rocket struct to default settings
+*/
 void resetRocket(struct rocket * rocket){
 	rocket->str = ROCKET;
 	rocket->row = 0;
@@ -131,12 +145,14 @@ void resetRocket(struct rocket * rocket){
 	rocket->alive = -1;
 }
 
-/* the code that runs in each thread */
-void *animate(void *arg)
+/**
+* Code that runs each saucer thread
+*/
+void *animateSaucer(void *arg)
 {
-	struct propset *info = arg;		/* point to info block	*/
+	struct saucer *info = arg;		/* point to info block	*/
 	int	len = strlen(info->str)+2;	/* +2 for padding	*/
-	int	col = rand()%(COLS-len-3);	/* space for padding	*/
+	int	col = 0;				/* space for padding	*/
 
 	while( 1 )
 	{
@@ -152,12 +168,35 @@ void *animate(void *arg)
 		pthread_mutex_unlock(&mx);	/* done with curses	*/
 
 		/* move item to next column and check for bouncing	*/
-
 		col += info->dir;
 
-		if ( col <= 0 && info->dir == -1 )
-			info->dir = 1;
-		else if (  col+len >= COLS && info->dir == 1 )
-			info->dir = -1;
+		if(col >= COLS){
+			pthread_mutex_lock(&saucers);
+			info->alive = -1;
+			pthread_mutex_unlock(&saucers);
+			pthread_exit(0);
+		}
+	}
+}
+
+/**
+* Code for the thread that spawns new saucers
+*/
+void *saucerSpawn(){
+	int i;
+	while(1)
+	{
+		for(i=0; i < MAXSAUCERS; i++){
+			if(sProps[i].alive == -1){
+				pthread_mutex_lock(&saucers);
+				resetSaucer(&sProps[i]);
+				pthread_create(&pSaucers[i], NULL, animateSaucer, &sProps[i]);
+				sProps[i].alive = 1;
+				pthread_mutex_unlock(&saucers);
+				break;
+			}
+		}
+		srand(time(NULL));
+		usleep((250 + (rand()%250))*TUNIT);
 	}
 }
