@@ -16,33 +16,51 @@
 #include	<unistd.h>
 #include	<string.h>
 
-#define	MAXMSG	10		/* limit to number of strings	*/
+#define	SAUCER "<--->"		/* The saucer String*/
+#define ROCKET "^"		/* The Rocket String*/
+#define TURRET "|"		/* The Turret String*/
 #define	TUNIT   20000		/* timeunits in microseconds */
+#define MAXSAUCERS 500		/* An Obsurdly large max saucer count*/
+#define MAXROCKETS 500		/* The maximum number of in flight rockets*/
 
-struct	propset {
+struct	saucer{
 		char	*str;	/* the message */
 		int	row;	/* the row     */
 		int	delay;  /* delay in time units */
 		int	dir;	/* +1 or -1	*/
+		int 	alive;	/*Indicates if this saucer is alive*/
 	};
+
+struct rocket{
+	char *str;	/*The rocket String*/
+	int row;	/*The row*/
+	int col;	/*The column*/
+	int delay;	/*The Speed of the rocket*/
+	int dir;	/* +1 or -1*/
+	int alive;	/*Indicates if thie rocket is alive*/
+};
 
 pthread_mutex_t mx = PTHREAD_MUTEX_INITIALIZER;
 
 int main(int ac, char *av[])
 {
-	int	       c;		/* user input		*/
-	pthread_t      thrds[MAXMSG];	/* the threads		*/
-	struct propset props[MAXMSG];	/* properties of string	*/
-	void	       *animate();	/* the function		*/
-	int	       num_msg ;	/* number of strings	*/
+	int	       c;			/* user input			*/
+	pthread_t      pSaucers[MAXSAUCERS];	/* The saucer threads		*/
+	pthread_t      pRockets[MAXROCKETS];	/* The rocket threds		*/
+	struct saucer sProps[MAXSAUCERS];	/* Properties of Saucers	*/
+	struct rocket rProps[MAXROCKETS];	/* Properties of Rockets	*/
+	void	       *animate();		/* the function			*/
+	int	       num_msg ;		/* number of strings		*/
 	int	     i;
 
+	/*
 	if ( ac == 1 ){
 		printf("usage: tanimate string ..\n"); 
 		exit(1);
 	}
+	*/
 
-	num_msg = setup(ac-1,av+1,props);
+	setup();
 
 	/* create all the threads */
 	for(i=0 ; i<num_msg; i++)
@@ -74,28 +92,40 @@ int main(int ac, char *av[])
 	return 0;
 }
 
-int setup(int nstrings, char *strings[], struct propset props[])
+int setup()
 {
-	int num_msg = ( nstrings > MAXMSG ? MAXMSG : nstrings );
-	int i;
+//	int num_msg = ( nstrings > MAXMSG ? MAXMSG : nstrings );
+//	int i;
 
 	/* assign rows and velocities to each string */
-	srand(getpid());
-	for(i=0 ; i<num_msg; i++){
-		props[i].str = strings[i];	/* the message	*/
-		props[i].row = i;		/* the row	*/
-		props[i].delay = 1+(rand()%15);	/* a speed	*/
-		props[i].dir = ((rand()%2)?1:-1);	/* +1 or -1	*/
-	}
+//	srand(getpid());
+//	for(i=0 ; i<num_msg; i++){
+//		props[i].str = strings[i];	/* the message	*/
+//		props[i].row = i;		/* the row	*/
+//		props[i].delay = 1+(rand()%15);	/* a speed	*/
+//		props[i].dir = ((rand()%2)?1:-1);	/* +1 or -1	*/
+//	}
 
+	/*reset all saucers to default*/
+
+	/*reset all rocklets to default*/
+	
 	/* set up curses */
 	initscr();
 	crmode();
 	noecho();
 	clear();
-	mvprintw(LINES-1,0,"'Q' to quit, '0'..'%d' to bounce",num_msg-1);
+//	mvprintw(LINES-1,0,"'Q' to quit, '0'..'%d' to bounce",num_msg-1);
 
-	return num_msg;
+//	return num_msg;
+}
+/*Sets a saucer struct to default settings*/
+void resetSaucer(struct saucer * saucer){
+
+}
+
+void resetRocket(struct rocket * rocket){
+
 }
 
 /* the code that runs in each thread */
