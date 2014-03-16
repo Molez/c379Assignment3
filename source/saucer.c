@@ -94,38 +94,41 @@ int main(int ac, char *av[])
 
 int setup()
 {
-//	int num_msg = ( nstrings > MAXMSG ? MAXMSG : nstrings );
-//	int i;
 
-	/* assign rows and velocities to each string */
-//	srand(getpid());
-//	for(i=0 ; i<num_msg; i++){
-//		props[i].str = strings[i];	/* the message	*/
-//		props[i].row = i;		/* the row	*/
-//		props[i].delay = 1+(rand()%15);	/* a speed	*/
-//		props[i].dir = ((rand()%2)?1:-1);	/* +1 or -1	*/
-//	}
 
 	/*reset all saucers to default*/
-
+	for(i=0; i < MAXSAUCERS; i++){
+		resetSaucer(sProps[i]);
+	}
 	/*reset all rocklets to default*/
-	
+	for(i=0; i < MAXROCKETS; i++){
+		resetRocket(rProps[i]);
+	}
 	/* set up curses */
 	initscr();
 	crmode();
 	noecho();
 	clear();
 //	mvprintw(LINES-1,0,"'Q' to quit, '0'..'%d' to bounce",num_msg-1);
-
-//	return num_msg;
 }
 /*Sets a saucer struct to default settings*/
 void resetSaucer(struct saucer * saucer){
-
+	saucer->str = SAUCER;
+	srand(time(NULL));
+	saucer->row = (rand()%6);
+	srand(time(NULL));
+	saucer->delay = 1+(rand()%15);
+	sacuer->dir = 1
+	saucer->alive = -1;
 }
-
+/*Sets a rocket struct to default settings*/
 void resetRocket(struct rocket * rocket){
-
+	rocket->str = ROCKET;
+	rocket->row = 0;
+	rocket->col = 0;
+	rocket->delay = 5;
+	rocket->dir = 1;
+	rocket->alive = -1;
 }
 
 /* the code that runs in each thread */
