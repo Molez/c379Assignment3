@@ -17,14 +17,15 @@
 #include	<string.h>
 
 #define	SAUCER "<--->"		/* The saucer String*/
+#define SAUCER_LEN 5		/*The length of the saucer string*/
 #define ROCKET "^"		/* The Rocket String*/
 #define TURRET "|"		/* The Turret String*/
 #define	TUNIT   20000		/* timeunits in microseconds */
-#define MAXSAUCERS 20		/* An Obsurdly large max saucer count*/
+#define MAXSAUCERS 200		/* An Obsurdly large max saucer count*/
 #define MAXROCKETS 500		/* The maximum number of in flight rockets */
 
 struct	saucer{
-		char	*str;	/* the message */
+		char	str[SAUCER_LEN];	/* the message */
 		int	row;	/* the row     */
 		int	delay;  /* delay in time units */
 		int	dir;	/* +1 or -1	*/
@@ -37,7 +38,7 @@ struct rocket{
 	int col;	/*The column*/
 	int delay;	/*The Speed of the rocket*/
 	int dir;	/* +1 or -1*/
-	int alive;	/*Indicates if thie rocket is alive*/
+	int alive;	/*Indicates if this rocket is alive*/
 };
 
 pthread_t      pSaucers[MAXSAUCERS];	/* The saucer threads		*/
@@ -74,16 +75,6 @@ int main(int ac, char *av[])
 	int	     i;
 
 	setup();
-
-	/* create all the threads */
-	/*
-	for(i=0 ; i<num_msg; i++)
-		if ( pthread_create(&thrds[i], NULL, animate, &props[i])){
-			fprintf(stderr,"error creating thread");
-			endwin();
-			exit(0);
-		}
-	*/
 
 	pthread_create(&spawnSaucer, NULL, saucerSpawn, NULL);
 	/* process user input */
@@ -124,12 +115,12 @@ int setup()
 * Sets a saucer struct to default settings
 */
 void resetSaucer(struct saucer * saucer){
-	saucer->str = SAUCER;
+	//saucer->str = SAUCER;
+	strncpy(saucer->str, SAUCER, strlen(SAUCER));
 	srand(time(NULL));
-	saucer->row = (rand()%10);
+	saucer->row = (rand()%8);
 	srand(time(NULL));
-	//saucer->delay = 5+(rand()%10);
-	saucer->delay = 2;
+	saucer->delay = 2+(rand()%14);
 	saucer->dir = 1;
 	saucer->alive = -1;
 }
@@ -174,7 +165,15 @@ void *animateSaucer(void *arg)
 			pthread_mutex_lock(&saucers);
 			info->alive = -1;
 			pthread_mutex_unlock(&saucers);
-			pthread_exit(0);
+			pthread_exit(NULL);
+		}
+		/*Used to dynamically shrink the print string as we hit the end of the
+		screen in order to ensure no wrap around*/
+		if(col + len >= COLS){
+			pthread_mutex_lock(&saucers);
+			info->str[len-1] = '\0';
+			pthread_mutex_unlock(&saucers);
+			len = len - 1;
 		}
 	}
 }
@@ -186,17 +185,17 @@ void *saucerSpawn(){
 	int i;
 	while(1)
 	{
+		pthread_mutex_lock(&saucers);
 		for(i=0; i < MAXSAUCERS; i++){
 			if(sProps[i].alive == -1){
-				pthread_mutex_lock(&saucers);
 				resetSaucer(&sProps[i]);
 				pthread_create(&pSaucers[i], NULL, animateSaucer, &sProps[i]);
 				sProps[i].alive = 1;
-				pthread_mutex_unlock(&saucers);
 				break;
 			}
 		}
+		pthread_mutex_unlock(&saucers);
 		srand(time(NULL));
-		usleep((250 + (rand()%250))*TUNIT);
+		usleep((100 + (rand()%100))*TUNIT);
 	}
 }
