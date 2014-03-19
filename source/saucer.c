@@ -11,6 +11,7 @@
 
 #include	<stdio.h>
 #include	<curses.h>
+#include	<ncurses.h>
 #include	<pthread.h>
 #include	<stdlib.h>
 #include	<unistd.h>
@@ -22,7 +23,9 @@
 #define TURRET "|"		/* The Turret String*/
 #define	TUNIT   20000		/* timeunits in microseconds */
 #define MAXSAUCERS 200		/* An Obsurdly large max saucer count*/
-#define MAXROCKETS 500		/* The maximum number of in flight rockets */
+#define MAXROCKETS 200		/* The maximum number of in flight rockets */
+#define	AIRSPACE 8		/* The number of lines at the top that can have saucers in them*/
+#define MAXESCAPED 20		/* Max number of pods that can escape */
 
 struct	saucer{
 		char	str[SAUCER_LEN];	/* the message */
@@ -41,11 +44,14 @@ struct rocket{
 	int alive;	/*Indicates if this rocket is alive*/
 };
 
-pthread_t      pSaucers[MAXSAUCERS];	/* The saucer threads		*/
-pthread_t      pRockets[MAXROCKETS];	/* The rocket threds		*/
-struct saucer sProps[MAXSAUCERS];	/* Properties of Saucers	*/
-struct rocket rProps[MAXROCKETS];	/* Properties of Rockets	*/
+pthread_t      	pSaucers[MAXSAUCERS];	/* The saucer threads		*/
+pthread_t      	pRockets[MAXROCKETS];	/* The rocket threds		*/
+struct saucer 	sProps[MAXSAUCERS];	/* Properties of Saucers	*/
+struct rocket 	rProps[MAXROCKETS];	/* Properties of Rockets	*/
 pthread_t	spawnSaucer;
+pthread_t	turretControl;
+int 		turretCol;
+int		numEscapted = 0;
 
 /*LOCKS*/
 /*-------------------------------------------------------------------*/
@@ -56,6 +62,8 @@ pthread_t	spawnSaucer;
 pthread_mutex_t mx = PTHREAD_MUTEX_INITIALIZER;
 /*Lock used for accessing any of the saucer data structures*/
 pthread_mutex_t saucers = PTHREAD_MUTEX_INITIALIZER; 
+/*Lock used for incrementing the escaped saucers variable*/
+pthread_mutex_t escaped = PTHREAD_MUTEX_INITIALIZER; 
 
 /**
 * Function prototypes
@@ -64,6 +72,7 @@ void resetSaucer(struct saucer * saucer);
 void resetRocket(struct rocket * rocket);
 void	       *animateSaucer();
 void	       *saucerSpawn();
+void drawTurret();
 
 /**
 * Main!
@@ -75,14 +84,26 @@ int main(int ac, char *av[])
 	int	     i;
 
 	setup();
-
+	void drawTurret();
 	pthread_create(&spawnSaucer, NULL, saucerSpawn, NULL);
 	/* process user input */
 	while(1) {
 		c = getch();
 		if ( c == 'Q' ) break;
+		
+		if ( c == 'a' || c == KEY_LEFT ){
+			if(turretCol > 1){
+				turretCol = turretCol - 1;
+			}
+			drawTurret();
 		}
-
+		if ( c == 'd' || c == KEY_RIGHT ){
+			if(turretCol < (COLS - 1)){
+				turretCol = turretCol + 1;
+			}
+			drawTurret();
+		}
+	}
 	/* cancel all the threads */
 	pthread_mutex_lock(&mx);
 	for (i=0; i<MAXSAUCERS; i++ )
@@ -104,12 +125,18 @@ int setup()
 	for(i=0; i < MAXROCKETS; i++){
 		resetRocket(&rProps[i]);
 	}
+	
 	/* set up curses */
 	initscr();
 	crmode();
 	noecho();
 	clear();
-//	mvprintw(LINES-1,0,"'Q' to quit, '0'..'%d' to bounce",num_msg-1);
+	keypad(stdscr, TRUE);
+	
+	turretCol = COLS / 2;
+	
+	mvprintw(LINES-1,0,"'Q' to quit.");
+	mvprintw(LINES-2,turretCol,TURRET);
 }
 /**
 * Sets a saucer struct to default settings
@@ -118,7 +145,7 @@ void resetSaucer(struct saucer * saucer){
 	//saucer->str = SAUCER;
 	strncpy(saucer->str, SAUCER, strlen(SAUCER));
 	srand(time(NULL));
-	saucer->row = (rand()%8);
+	saucer->row = (rand()%AIRSPACE);
 	srand(time(NULL));
 	saucer->delay = 2+(rand()%14);
 	saucer->dir = 1;
@@ -165,6 +192,9 @@ void *animateSaucer(void *arg)
 			pthread_mutex_lock(&saucers);
 			info->alive = -1;
 			pthread_mutex_unlock(&saucers);
+			pthread_mutex_lock(&escaped);
+				escaped ++;
+			pthread_mutex_unlock(&escaped);
 			pthread_exit(NULL);
 		}
 		/*Used to dynamically shrink the print string as we hit the end of the
@@ -198,4 +228,17 @@ void *saucerSpawn(){
 		srand(time(NULL));
 		usleep((100 + (rand()%100))*TUNIT);
 	}
+}
+/**
+* Draws the Turret to the screen
+*/
+void drawTurret(){
+	pthread_mutex_lock(&mx);
+	move( LINES-2, turretCol-1);	/* can call curses	*/
+	addch(' ');			/* at a the same time	*/
+	addstr(TURRET);		/* Since I doubt it is	*/
+	addch(' ');			/* reentrant		*/
+	move(LINES-1,COLS-1);	/* park cursor		*/
+	refresh();
+	pthread_mutex_unlock(&mx);
 }
