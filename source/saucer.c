@@ -26,6 +26,7 @@
 #define MAXROCKETS 200		/* The maximum number of in flight rockets */
 #define	AIRSPACE 8		/* The number of lines at the top that can have saucers in them*/
 #define MAXESCAPED 20		/* Max number of pods that can escape */
+#define DEFAULTROCKETS 30	/* Number of starting Rockets*/
 
 struct	saucer{
 		char	str[SAUCER_LEN];	/* the message */
@@ -52,6 +53,7 @@ pthread_t	spawnSaucer;
 pthread_t	turretControl;
 int 		turretCol;
 int		numEscapted = 0;
+int		numRockets = DEFAULTROCKETS;
 
 /*LOCKS*/
 /*-------------------------------------------------------------------*/
@@ -62,8 +64,12 @@ int		numEscapted = 0;
 pthread_mutex_t mx = PTHREAD_MUTEX_INITIALIZER;
 /*Lock used for accessing any of the saucer data structures*/
 pthread_mutex_t saucers = PTHREAD_MUTEX_INITIALIZER; 
+/*Lock used for accessing any of the rocket data structures*/
+pthread_mutex_t rockets = PTHREAD_MUTEX_INITIALIZER; 
 /*Lock used for incrementing the escaped saucers variable*/
 pthread_mutex_t escaped = PTHREAD_MUTEX_INITIALIZER; 
+/*Lock used for incrementing/decrementing the users rocket count*/
+pthread_mutex_t currentRockets= PTHREAD_MUTEX_INITIALIZER;
 
 /**
 * Function prototypes
@@ -71,8 +77,12 @@ pthread_mutex_t escaped = PTHREAD_MUTEX_INITIALIZER;
 void resetSaucer(struct saucer * saucer);
 void resetRocket(struct rocket * rocket);
 void	       *animateSaucer();
+void	       *animateRocket();
 void	       *saucerSpawn();
 void drawTurret();
+void spawnRocket();
+void printInfo();
+void setup();
 
 /**
 * Main!
@@ -103,6 +113,15 @@ int main(int ac, char *av[])
 			}
 			drawTurret();
 		}
+		if( c == ' '){
+			if(numRockets > 0){
+				spawnRocket();
+				pthread_mutex_lock(&currentRockets);
+				numRockets--;
+				pthread_mutex_unlock(&currentRockets);
+				printInfo();
+			}
+		}
 	}
 	/* cancel all the threads */
 	pthread_mutex_lock(&mx);
@@ -114,7 +133,7 @@ int main(int ac, char *av[])
 /**
 * Game set-up
 */
-int setup()
+void setup()
 {
 	int i;
 	/*reset all saucers to default*/
@@ -135,7 +154,7 @@ int setup()
 	
 	turretCol = COLS / 2;
 	
-	mvprintw(LINES-1,0,"'Q' to quit.");
+	printInfo();
 	mvprintw(LINES-2,turretCol,TURRET);
 }
 /**
@@ -156,10 +175,10 @@ void resetSaucer(struct saucer * saucer){
 */
 void resetRocket(struct rocket * rocket){
 	rocket->str = ROCKET;
-	rocket->row = 0;
+	rocket->row = (LINES - 3);
 	rocket->col = 0;
 	rocket->delay = 5;
-	rocket->dir = 1;
+	rocket->dir = -1;
 	rocket->alive = -1;
 }
 
@@ -193,8 +212,9 @@ void *animateSaucer(void *arg)
 			info->alive = -1;
 			pthread_mutex_unlock(&saucers);
 			pthread_mutex_lock(&escaped);
-				escaped ++;
+				numEscapted++;
 			pthread_mutex_unlock(&escaped);
+			printInfo();
 			pthread_exit(NULL);
 		}
 		/*Used to dynamically shrink the print string as we hit the end of the
@@ -242,3 +262,82 @@ void drawTurret(){
 	refresh();
 	pthread_mutex_unlock(&mx);
 }
+
+void spawnRocket(){
+int i;
+pthread_mutex_lock(&rockets);
+		for(i=0; i < MAXROCKETS; i++){
+			if(rProps[i].alive == -1){
+				resetRocket(&rProps[i]);
+				rProps[i].col = turretCol;
+				pthread_create(&pRockets[i], NULL, animateRocket, &rProps[i]);
+				rProps[i].alive = 1;
+				break;
+			}
+		}
+pthread_mutex_unlock(&rockets);
+}
+
+/**
+* Code that runs each rocket on a thread
+*/
+void *animateRocket(void *arg)
+{
+	struct rocket *info = arg;		/* point to info block	*/
+	int row = LINES - 3;
+	
+	pthread_mutex_lock(&mx);	/* only one thread	*/
+		   move( row, info->col );	/* can call curses	*/
+		   addstr( info->str );		/* Since I doubt it is	*/
+		   move(LINES-1,COLS-1);	/* park cursor		*/
+		   refresh();			/* and show it		*/
+	pthread_mutex_unlock(&mx);	/* done with curses	*/
+
+	row += info->dir;
+	
+	while( 1 )
+	{
+		usleep(info->delay*TUNIT);
+
+		pthread_mutex_lock(&mx);	/* only one thread	*/
+		   move( row + 1, info->col );	/* can call curses	*/
+		   addch(' ');			/* at a the same time	*/
+		   move( row, info->col );	/* can call curses	*/
+		   addstr( info->str );		/* Since I doubt it is	*/
+		   move(LINES-1,COLS-1);	/* park cursor		*/
+		   refresh();			/* and show it		*/
+		pthread_mutex_unlock(&mx);	/* done with curses	*/
+
+		/* move item to next column and check for bouncing	*/
+		row += info->dir;
+
+		if(row < 0){
+			pthread_mutex_lock(&mx);	/* only one thread	*/
+		   	move( row + 1, info->col );	/* can call curses	*/
+		  	addch(' ');			/* at a the same time	*/ 
+		  	move(LINES-1,COLS-1);	/* park cursor		*/
+		  	refresh();			/* and show it		*/
+			pthread_mutex_unlock(&mx);	/* done with curses	*/
+			
+			pthread_mutex_lock(&rockets);
+			info->alive = -1;
+			pthread_mutex_unlock(&rockets);
+			pthread_exit(NULL);
+		}
+	}
+}
+/**
+* Prints the game info at the bottom of the screen
+*/
+void printInfo(){
+	char temp[1024];
+	snprintf(temp, 1024, "Quit: 'Q' | Move: 'a'&'d' | Fire: 'space' | ESCAPED: %d | ROCKETS: %03d", numEscapted, numRockets);
+	pthread_mutex_lock(&mx);	/* only one thread	*/
+	move( LINES -1, 0 );	/* can call curses	*/
+	addstr( temp );		
+	move(LINES-1,COLS-1);	/* park cursor		*/
+	refresh();			/* and show it		*/
+	pthread_mutex_unlock(&mx);	/* done with curses	*/
+}
+
+
