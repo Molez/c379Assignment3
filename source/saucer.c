@@ -151,7 +151,6 @@ int main(int argc, char *argv[])
 				printInfo();
 			}
 		}
-		
 		//2p shoot
 		if( c == KEY_UP && killFlag != 1){
 			if(numRockets > 0){
@@ -161,10 +160,7 @@ int main(int argc, char *argv[])
 				pthread_mutex_unlock(&currentRockets);
 				printInfo();
 			}
-		}
-		
-		
-		
+		}	
 	}
 	endwin();
 	pthread_cancel(refereeThread);//Kill the referee thread upon leaving
@@ -199,9 +195,7 @@ void gameStart(){
 	addstr( "'S' TO START" );		
 	move(LINES-1,COLS-1);	
 	refresh();		
-
 }
-
 
 /**
 * Handles a game over
@@ -250,11 +244,12 @@ void setup()
 	for(i=0; i < MAXSAUCERS; i++){
 		resetSaucer(&sProps[i]);
 	}
-	/*reset all rocklets to default*/
+	/*reset all rockets to default*/
 	for(i=0; i < MAXROCKETS; i++){
 		resetRocket(&rProps[i]);
 	}
 	
+	/*Position the turrets at their start locations */
 	if(secondPlayer == 1){
 		turretCol = COLS / 4;
 		turretCol2p = (COLS / 4) * 3;
@@ -313,7 +308,6 @@ void *animateSaucer(void *arg)
 			pthread_exit(NULL);
 		}
 
-		/* move item to next column and check for bouncing	*/
 		pthread_mutex_lock(&saucers);
 		info->col += 1;
 		pthread_mutex_unlock(&saucers);
@@ -464,12 +458,6 @@ int checkCollision(int myRow, int myCol){
 				pthread_mutex_lock(&saucers);
 				sProps[i].die = 1;
 				pthread_mutex_unlock(&saucers);
-				pthread_mutex_lock(&mx);	/* only one thread	*/
-				move( sProps[i].row, sProps[i].col );	/* can call curses	*/
-				addstr( "     " );		
-				//move(LINES-1,COLS-1);	/* park cursor		*/
-				refresh();			/* and show it		*/
-				pthread_mutex_unlock(&mx);	/* done with curses	*/
 				pthread_mutex_lock(&currentRockets);
 					numRockets += 3;
 				pthread_mutex_unlock(&currentRockets);
@@ -491,7 +479,6 @@ int checkCollision(int myRow, int myCol){
 void *drawScreen()
 {
 	int i;
-	
 	while(1){
 		usleep(DRAWDELAY*TUNIT);
 		pthread_mutex_lock(&mx);
@@ -546,8 +533,6 @@ void *gameReferee(){
 			gameOver();
 		}
 	}
-
-
 }
 
 
