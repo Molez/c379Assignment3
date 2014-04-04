@@ -9,7 +9,8 @@
 #define	SAUCER "<--->"		/* The saucer String*/
 #define SAUCER_LEN 5		/*The length of the saucer string*/
 #define ROCKET "^"			/* The Rocket String*/
-#define TURRET "|"			/* The Turret String*/
+#define TURRET "|"			/* The 1p Turret String*/
+#define TURRET2P "!"		/* The 2p Turret String*/
 #define	TUNIT   20000		/* timeunits in microseconds */
 #define MAXSAUCERS 200		/* An Obsurdly large max saucer count*/
 #define MAXROCKETS 200		/* The maximum number of in flight rockets */
@@ -26,7 +27,6 @@ struct	saucer{
 	int	row;	/* the row     */
 	int col;	/* The column */
 	int	delay;  /* delay in time units */
-	//int	dir;	/* +1 or -1	*/
 	int 	alive;	/*Indicates if this saucer is alive*/
 	int 	die;
 };
@@ -45,19 +45,21 @@ struct gridPoint{
 	int col;
 };
 
-pthread_t      	pSaucers[MAXSAUCERS];	/* The saucer threads		*/
-pthread_t      	pRockets[MAXROCKETS];	/* The rocket threads		*/
+pthread_t      	pSaucers[MAXSAUCERS];	/* The saucer threads	*/
+pthread_t      	pRockets[MAXROCKETS];	/* The rocket threads	*/
 struct saucer 	sProps[MAXSAUCERS];	/* Properties of Saucers	*/
 struct rocket 	rProps[MAXROCKETS];	/* Properties of Rockets	*/
 pthread_t	spawnSaucer;
 pthread_t	drawThread;
 pthread_t	refereeThread;
 int 		turretCol;
+int 		turretCol2p;
 int		numEscapted = 0;
 int		numRockets = DEFAULTROCKETS;
 int		points = 0;
 int killFlag = 0; //used to determine if we need to kill user input
 int initFlag = 0; //Used to signify that threads have been initialised
+int secondPlayer = 0; //Flag for second player
 FILE * logFile;
 
 /*LOCKS*/
@@ -99,12 +101,13 @@ void *gameReferee();
 /**
 * Main!
 */
-int main(int ac, char *av[])
+int main(int argc, char *argv[])
 {
 	int	       c;			/* user input			*/
 	gameStart();
-	//void drawTurret();
-	//pthread_create(&spawnSaucer, NULL, saucerSpawn, NULL);
+	
+	if( argc == 2 && strcmp(argv[1], "2") == 0)
+		secondPlayer = 1; //Flag for 2 player
 	/* process user input */
 	while(1) {
 		c = getch();
@@ -114,26 +117,54 @@ int main(int ac, char *av[])
 			killFlag = 0;
 			setup();
 		}
-		
-		if ( (c == 'a' || c == KEY_LEFT) && (killFlag != 1)){
+		//1p right
+		if ( c == 'a' && (killFlag != 1)){
 			if(turretCol > 1){
 				turretCol = turretCol - 1;
 			}
 		}
-		if ( (c == 'd' || c == KEY_RIGHT) && (killFlag != 1) ){
+		//2p left
+		if ( c == KEY_LEFT && (killFlag != 1)){
+			if(turretCol2p > 1){
+				turretCol2p = turretCol2p - 1;
+			}
+		}
+		//1p right
+		if ( c == 'd' && (killFlag != 1) ){
 			if(turretCol < (COLS - 1)){
 				turretCol = turretCol + 1;
 			}
 		}
-		if( c == ' ' && killFlag != 1){
+		//2p right
+		if ( c == KEY_RIGHT && (killFlag != 1) ){
+			if(turretCol2p < (COLS - 1)){
+				turretCol2p = turretCol2p + 1;
+			}
+		}
+		//1p shoot
+		if( (c == ' ' || c == 'w') && killFlag != 1){
 			if(numRockets > 0){
-				spawnRocket();
+				spawnRocket(1);
 				pthread_mutex_lock(&currentRockets);
 				numRockets--;
 				pthread_mutex_unlock(&currentRockets);
 				printInfo();
 			}
 		}
+		
+		//2p shoot
+		if( c == KEY_UP && killFlag != 1){
+			if(numRockets > 0){
+				spawnRocket(2);
+				pthread_mutex_lock(&currentRockets);
+				numRockets--;
+				pthread_mutex_unlock(&currentRockets);
+				printInfo();
+			}
+		}
+		
+		
+		
 	}
 	endwin();
 	pthread_cancel(refereeThread);//Kill the referee thread upon leaving
@@ -224,7 +255,12 @@ void setup()
 		resetRocket(&rProps[i]);
 	}
 	
-	turretCol = COLS / 2;
+	if(secondPlayer == 1){
+		turretCol = COLS / 4;
+		turretCol2p = (COLS / 4) * 3;
+	}else{
+		turretCol = COLS / 2;
+	}
 	
 	printInfo();
 	mvprintw(LINES-2,turretCol,TURRET);
@@ -332,24 +368,34 @@ void *saucerSpawn(){
 */
 void drawTurret(){
 	pthread_mutex_lock(&mx);
-	move( LINES-2, turretCol-1);	/* can call curses	*/
-	addch(' ');			/* at a the same time	*/
-	addstr(TURRET);		/* Since I doubt it is	*/
-	addch(' ');			/* reentrant		*/
-	move(LINES-1,COLS-1);	/* park cursor		*/
+	//Draw 1st turret
+	move( LINES-2, turretCol);	
+	addstr(TURRET);		
+	move(LINES-1,COLS-1);	
 	refresh();
+	//Draw second turret
+	if(secondPlayer == 1){
+		move( LINES-2, turretCol2p);
+		addstr(TURRET2P);		
+		move(LINES-1,COLS-1);	
+		refresh();
+	}
 	pthread_mutex_unlock(&mx);
 }
 /**
 *	Creates and spawns a new rocket thread
 */
-void spawnRocket(){
+void spawnRocket(int player){
 int i;
 pthread_mutex_lock(&rockets);
 		for(i=0; i < MAXROCKETS; i++){
 			if(rProps[i].alive == -1){
 				resetRocket(&rProps[i]);
-				rProps[i].col = turretCol;
+				if(player ==1){
+					rProps[i].col = turretCol;
+				}else{
+					rProps[i].col = turretCol2p;
+				}
 				pthread_create(&pRockets[i], NULL, animateRocket, &rProps[i]);
 				rProps[i].alive = 1;
 				break;
