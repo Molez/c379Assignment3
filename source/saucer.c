@@ -49,18 +49,18 @@ pthread_t      	pSaucers[MAXSAUCERS];	/* The saucer threads	*/
 pthread_t      	pRockets[MAXROCKETS];	/* The rocket threads	*/
 struct saucer 	sProps[MAXSAUCERS];	/* Properties of Saucers	*/
 struct rocket 	rProps[MAXROCKETS];	/* Properties of Rockets	*/
-pthread_t	spawnSaucer;
-pthread_t	drawThread;
-pthread_t	refereeThread;
-int 		turretCol;
-int 		turretCol2p;
-int		numEscapted = 0;
-int		numRockets = DEFAULTROCKETS;
-int		points = 0;
-int killFlag = 0; //used to determine if we need to kill user input
-int initFlag = 0; //Used to signify that threads have been initialised
-int secondPlayer = 0; //Flag for second player
-FILE * logFile;
+pthread_t		spawnSaucer;
+pthread_t		drawThread;
+pthread_t		refereeThread;
+int 			turretCol;
+int 			turretCol2p;
+int				numEscapted = 0;
+int				numRockets = DEFAULTROCKETS;
+int				points = 0;
+int 			killFlag = 0; //used to determine if we need to kill user input
+int 			initFlag =0;//Used to signify that threads have been initialised
+int 			secondPlayer = 0; //Flag for second player
+FILE * 			logFile;
 
 /*LOCKS*/
 /*-------------------------------------------------------------------*/
@@ -83,27 +83,27 @@ pthread_mutex_t currentPoints= PTHREAD_MUTEX_INITIALIZER;
 /**
 * Function prototypes
 */
-void resetSaucer(struct saucer * saucer);
-void resetRocket(struct rocket * rocket);
-void	       *animateSaucer();
-void	       *animateRocket();
-void	       *saucerSpawn();
-void drawTurret();
-void spawnRocket();
-void printInfo();
-void setup();
-void gameOver();
-void gameStart();
-int checkCollision(int myRow, int myCol);
-void *drawScreen();
-void *gameReferee();
+void 			resetSaucer(struct saucer * saucer);
+void 			resetRocket(struct rocket * rocket);
+void	       	*animateSaucer();
+void	       	*animateRocket();
+void	       	*saucerSpawn();
+void 			drawTurret();
+void 			spawnRocket();
+void 			printInfo();
+void 			setup();
+void 			gameOver();
+void 			gameStart();
+int 			checkCollision(int myRow, int myCol);
+void 			*drawScreen();
+void 			*gameReferee();
 
 /**
 * Main!
 */
 int main(int argc, char *argv[])
 {
-	int	       c;			/* user input			*/
+	int	       c;			/* user input*/
 	gameStart();
 	
 	if( argc == 2 && strcmp(argv[1], "2") == 0)
