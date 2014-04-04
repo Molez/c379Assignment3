@@ -16,6 +16,7 @@
 #define	AIRSPACE 8		/* The number of lines at the top that can have saucers in them*/
 #define MAXESCAPED 20		/* Max number of pods that can escape */
 #define DEFAULTROCKETS 30	/* Number of starting Rockets*/
+#define DRAWDELAY 1			/*The refresh delay*/
 
 struct	saucer{
 	char	str[SAUCER_LEN];	/* the message */
@@ -47,6 +48,7 @@ pthread_t      	pRockets[MAXROCKETS];	/* The rocket threads		*/
 struct saucer 	sProps[MAXSAUCERS];	/* Properties of Saucers	*/
 struct rocket 	rProps[MAXROCKETS];	/* Properties of Rockets	*/
 pthread_t	spawnSaucer;
+pthread_t	drawThread;
 int 		turretCol;
 int		numEscapted = 0;
 int		numRockets = DEFAULTROCKETS;
@@ -85,6 +87,7 @@ void printInfo();
 void setup();
 void gameOver();
 int checkCollision(int myRow, int myCol);
+void *drawScreen();
 
 /**
 * Main!
@@ -104,13 +107,13 @@ int main(int ac, char *av[])
 			if(turretCol > 1){
 				turretCol = turretCol - 1;
 			}
-			drawTurret();
+			//drawTurret();
 		}
 		if ( (c == 'd' || c == KEY_RIGHT) && (killFlag != 1) ){
 			if(turretCol < (COLS - 1)){
 				turretCol = turretCol + 1;
 			}
-			drawTurret();
+			//drawTurret();
 		}
 		if( c == ' ' && killFlag != 1){
 			if(numRockets > 0){
@@ -134,6 +137,7 @@ void gameOver(){
 	/* cancel all the threads */
 	killFlag = 1;
 	pthread_cancel(spawnSaucer);
+	pthread_cancel(drawThread);
 	for (i=0; i<MAXSAUCERS; i++ )
 		pthread_cancel(pSaucers[i]);
 	for (i=0; i<MAXROCKETS; i++ )
@@ -158,6 +162,7 @@ void setup()
 	logFile = fopen("log.txt", "w+");
 	
 	pthread_create(&spawnSaucer, NULL, saucerSpawn, NULL);
+	pthread_create(&drawThread, NULL, drawScreen, NULL);
 
 	/*reset all saucers to default (tucked the collision grid in there too)*/
 	for(i=0; i < MAXSAUCERS; i++){
@@ -220,21 +225,13 @@ void *animateSaucer(void *arg)
 	{
 		usleep(info->delay*TUNIT);
 		
+		//Check if the thread has been flagged to die
 		if(info->die == 1){
 			pthread_mutex_lock(&saucers);
 			info->alive = -1;
 			pthread_mutex_unlock(&saucers);
 			pthread_exit(NULL);
 		}
-		
-		pthread_mutex_lock(&mx);	/* only one thread	*/
-		   move( info->row, info->col );	/* can call curses	*/
-		   addch(' ');			/* at a the same time	*/
-		   addstr( info->str );		/* Since I doubt it is	*/
-		   addch(' ');			/* reentrant		*/
-		   move(LINES-1,COLS-1);	/* park cursor		*/
-		   refresh();			/* and show it		*/
-		pthread_mutex_unlock(&mx);	/* done with curses	*/
 
 		/* move item to next column and check for bouncing	*/
 		pthread_mutex_lock(&saucers);
@@ -248,7 +245,6 @@ void *animateSaucer(void *arg)
 			pthread_mutex_lock(&escaped);
 				numEscapted++;
 			pthread_mutex_unlock(&escaped);
-			printInfo();
 			if(numEscapted >= MAXESCAPED)
 			{
 				gameOver();
@@ -323,40 +319,16 @@ pthread_mutex_unlock(&rockets);
 void *animateRocket(void *arg)
 {
 	struct rocket *info = arg;		/* point to info block	*/
-	
-	pthread_mutex_lock(&mx);	/* only one thread	*/
-		   move( info->row, info->col );	/* can call curses	*/
-		   addstr( info->str );		/* Since I doubt it is	*/
-		   move(LINES-1,COLS-1);	/* park cursor		*/
-		   refresh();			/* and show it		*/
-	pthread_mutex_unlock(&mx);	/* done with curses	*/
 
-	info->row += info->dir;
+	//info->row += info->dir;
 	
 	while( 1 )
 	{
 		usleep(info->delay*TUNIT);
-
-		pthread_mutex_lock(&mx);	/* only one thread	*/
-		   move( info->row + 1, info->col );	/* can call curses	*/
-		   addch(' ');			/* at a the same time	*/
-		   move( info->row, info->col );	/* can call curses	*/
-		   addstr( info->str );		/* Since I doubt it is	*/
-		   move(LINES-1,COLS-1);	/* park cursor		*/
-		   refresh();			/* and show it		*/
-		pthread_mutex_unlock(&mx);	/* done with curses	*/
 		
 		/*Check for collision, Exit if we find collision*/
 		//fprintf(logFile, "Calling collision\n"); 
 		if(checkCollision(info->row, info->col) == 1){
-			//fprintf(logFile, "Inside collision\n"); 
-			//fprintf(logFile, "Call collision"); 
-			pthread_mutex_lock(&mx);	/* only one thread	*/
-			move( info->row, info->col );	/* can call curses	*/
-			addch(' ');			/* at a the same time	*/
-			move(LINES-1,COLS-1);	/* park cursor		*/
-			refresh();			/* and show it		*/
-			pthread_mutex_unlock(&mx);	/* done with curses	*/
 			pthread_mutex_lock(&rockets);
 			info->alive = -1;
 			pthread_mutex_unlock(&rockets);
@@ -367,12 +339,6 @@ void *animateRocket(void *arg)
 		info->row += info->dir;
 
 		if(info->row < 0){
-			pthread_mutex_lock(&mx);	/* only one thread	*/
-		   	move( info->row + 1, info->col );	/* can call curses	*/
-		  	addch(' ');			/* at a the same time	*/ 
-		  	move(LINES-1,COLS-1);	/* park cursor		*/
-		  	refresh();			/* and show it		*/
-			pthread_mutex_unlock(&mx);	/* done with curses	*/
 			pthread_mutex_lock(&rockets);
 			info->alive = -1;
 			pthread_mutex_unlock(&rockets);
@@ -419,6 +385,41 @@ int checkCollision(int myRow, int myCol){
 	fprintf(logFile, "%d %d\n", myRow, myCol); 
 	pthread_mutex_unlock(&collision);
 	return 0;
+}
+
+/**
+* Code that draws the game screen
+*/
+void *drawScreen()
+{
+	int i;
+	
+	while(1){
+		usleep(DRAWDELAY*TUNIT);
+		pthread_mutex_lock(&mx);
+		clear();
+		//Draw saucers
+		for(i=0; i<MAXSAUCERS;i++){
+			if(sProps[i].alive != -1 && sProps[i].die != 1){
+				move( sProps[i].row, sProps[i].col );
+				addstr( sProps[i].str );		
+			}
+		}
+		//Draw Rockets
+		for(i=0; i<MAXROCKETS;i++){
+			if(rProps[i].alive != -1){
+				move( rProps[i].row + 1, rProps[i].col );
+				addch(' ');			
+				move( rProps[i].row, rProps[i].col );	
+				addstr( rProps[i].str );
+			}
+		}
+		move(LINES-1,COLS-1);	/* park cursor		*/
+		refresh();	
+		pthread_mutex_unlock(&mx);
+		printInfo(); //Print the bottom info
+		drawTurret(); //Draw the turret
+	}
 }
 
 
