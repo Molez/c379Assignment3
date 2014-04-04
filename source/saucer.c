@@ -27,7 +27,6 @@ struct	saucer{
 	int col;	/* The column */
 	int	delay;  /* delay in time units */
 	//int	dir;	/* +1 or -1	*/
-	int	index;	/*Location in the collision grid*/
 	int 	alive;	/*Indicates if this saucer is alive*/
 	int 	die;
 };
@@ -56,6 +55,7 @@ pthread_t	refereeThread;
 int 		turretCol;
 int		numEscapted = 0;
 int		numRockets = DEFAULTROCKETS;
+int		points = 0;
 int killFlag = 0; //used to determine if we need to kill user input
 int initFlag = 0; //Used to signify that threads have been initialised
 FILE * logFile;
@@ -75,8 +75,8 @@ pthread_mutex_t rockets = PTHREAD_MUTEX_INITIALIZER;
 pthread_mutex_t escaped = PTHREAD_MUTEX_INITIALIZER; 
 /*Lock used for incrementing/decrementing the users rocket count*/
 pthread_mutex_t currentRockets= PTHREAD_MUTEX_INITIALIZER;
-/*Lock used for incrementing/decrementing the users rocket count*/
-pthread_mutex_t collision= PTHREAD_MUTEX_INITIALIZER;
+/*Lock used for incrementing/decrementing the users point count*/
+pthread_mutex_t currentPoints= PTHREAD_MUTEX_INITIALIZER;
 
 /**
 * Function prototypes
@@ -243,7 +243,6 @@ void resetSaucer(struct saucer * saucer){
 	//saucer->dir = 1;
 	saucer->alive = -1;
 	saucer->col = 0;
-	saucer->index = -1;
 	saucer->die = 0;
 }
 /**
@@ -318,7 +317,6 @@ void *saucerSpawn(){
 		for(i=0; i < MAXSAUCERS; i++){
 			if(sProps[i].alive == -1){
 				resetSaucer(&sProps[i]);
-				sProps[i].index = i;
 				pthread_create(&pSaucers[i], NULL, animateSaucer, &sProps[i]);
 				sProps[i].alive = 1;
 				break;
@@ -342,7 +340,9 @@ void drawTurret(){
 	refresh();
 	pthread_mutex_unlock(&mx);
 }
-
+/**
+*	Creates and spawns a new rocket thread
+*/
 void spawnRocket(){
 int i;
 pthread_mutex_lock(&rockets);
@@ -372,7 +372,6 @@ void *animateRocket(void *arg)
 		usleep(info->delay*TUNIT);
 		
 		/*Check for collision, Exit if we find collision*/
-		//fprintf(logFile, "Calling collision\n"); 
 		if(checkCollision(info->row, info->col) == 1){
 			pthread_mutex_lock(&rockets);
 			info->alive = -1;
@@ -397,7 +396,8 @@ void *animateRocket(void *arg)
 void printInfo(){
 	char temp[1024];
 	snprintf(temp, 1024, "Quit: 'Q' | Move: 'a'&'d' | Fire: 'space' | "
-	"ESCAPED: %d | ROCKETS: %03d", numEscapted, numRockets);
+	"ESCAPED: %d | ROCKETS: %03d | POINTS: %04d ", numEscapted, numRockets, 
+	points);
 	pthread_mutex_lock(&mx);	/* only one thread	*/
 	move( LINES -1, 0 );	/* can call curses	*/
 	addstr( temp );		
@@ -406,11 +406,15 @@ void printInfo(){
 	pthread_mutex_unlock(&mx);	/* done with curses	*/
 }
 
+/**
+*	Checks if a collision exists between a rocket and a saucer
+*/
 int checkCollision(int myRow, int myCol){
 	int i;
 	for(i=0; i<MAXSAUCERS;i++){
 		if(sProps[i].row == myRow && sProps[i].alive != -1){
-			if((myCol >= sProps[i].col) && (myCol <= (sProps[i].col + SAUCER_LEN))){
+			if((myCol >= sProps[i].col) && (myCol <= (sProps[i].col + 
+			SAUCER_LEN))){
 				pthread_mutex_lock(&saucers);
 				sProps[i].die = 1;
 				pthread_mutex_unlock(&saucers);
@@ -421,15 +425,17 @@ int checkCollision(int myRow, int myCol){
 				refresh();			/* and show it		*/
 				pthread_mutex_unlock(&mx);	/* done with curses	*/
 				pthread_mutex_lock(&currentRockets);
-					numRockets += 5;
+					numRockets += 3;
 				pthread_mutex_unlock(&currentRockets);
+				pthread_mutex_lock(&currentPoints);
+					points += 1;
+				pthread_mutex_unlock(&currentPoints);
 				printInfo();
 				return 1;
 			}
 		}
 	}
 	fprintf(logFile, "%d %d\n", myRow, myCol); 
-	pthread_mutex_unlock(&collision);
 	return 0;
 }
 
@@ -469,6 +475,11 @@ void *drawScreen()
 	}
 }
 
+/**
+* Thread to referee the game. This essentially looks for the instant
+* Where the user has 0 rockets and the last one leaves the screen. The
+* game over caused by too many escapes can be managed by saucers
+*/
 void *gameReferee(){
 	int gameOverFlag;
 	int i;
