@@ -12,8 +12,8 @@
 #define TURRET "|"			/* The 1p Turret String*/
 #define TURRET2P "!"		/* The 2p Turret String*/
 #define	TUNIT   20000		/* timeunits in microseconds */
-#define MAXSAUCERS 200		/* An Obsurdly large max saucer count*/
-#define MAXROCKETS 200		/* The maximum number of in flight rockets */
+#define MAXSAUCERS 100		/* An Obsurdly large max saucer count*/
+#define MAXROCKETS 100		/* The maximum number of in flight rockets */
 #define	AIRSPACE 8			/* The number of lines at the top that can have 
 							saucers in them*/
 #define MAXESCAPED 20		/* Max number of pods that can escape */
