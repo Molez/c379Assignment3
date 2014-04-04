@@ -53,9 +53,6 @@ int		numRockets = DEFAULTROCKETS;
 int killFlag = 0;
 FILE * logFile;
 
-/*Collision Grid*/
-struct gridPoint collisionGrid[MAXSAUCERS];
-
 /*LOCKS*/
 /*-------------------------------------------------------------------*/
 /*ALWAYS attempt to access them in the order they appear here to
@@ -165,8 +162,6 @@ void setup()
 	/*reset all saucers to default (tucked the collision grid in there too)*/
 	for(i=0; i < MAXSAUCERS; i++){
 		resetSaucer(&sProps[i]);
-		collisionGrid[i].row = -1;
-		collisionGrid[i].col = -1;
 	}
 	/*reset all rocklets to default*/
 	for(i=0; i < MAXROCKETS; i++){
@@ -245,16 +240,7 @@ void *animateSaucer(void *arg)
 		pthread_mutex_lock(&saucers);
 		info->col += 1;
 		pthread_mutex_unlock(&saucers);
-		//fprintf(logFile, "Before Saucer Collision Lock\n");
-		pthread_mutex_lock(&collision);
-		//fprintf(logFile, "After Saucer Collision Lock\n");
-			collisionGrid[info->index].row = info->row;
-			collisionGrid[info->index].col = info->col;
-		//fprintf(logFile, "Before Saucer Collision UNLock\n");
-		pthread_mutex_unlock(&collision);
-		//fprintf(logFile, "After Saucer Collision UNLock\n");
 		
-
 		if(info->col >= COLS){
 			pthread_mutex_lock(&saucers);
 			info->alive = -1;
@@ -410,27 +396,22 @@ void printInfo(){
 
 int checkCollision(int myRow, int myCol){
 	int i;
-	pthread_mutex_lock(&collision);
 	for(i=0; i<MAXSAUCERS;i++){
-		if(collisionGrid[i].row == myRow){
-			if((myCol >= collisionGrid[i].col) && (myCol <= (collisionGrid[i].col + SAUCER_LEN))){
+		if(sProps[i].row == myRow && sProps[i].alive != -1){
+			if((myCol >= sProps[i].col) && (myCol <= (sProps[i].col + SAUCER_LEN))){
 				pthread_mutex_lock(&saucers);
 				sProps[i].die = 1;
 				pthread_mutex_unlock(&saucers);
 				pthread_mutex_lock(&mx);	/* only one thread	*/
-				move( collisionGrid[i].row, collisionGrid[i].col );	/* can call curses	*/
+				move( sProps[i].row, sProps[i].col );	/* can call curses	*/
 				addstr( "     " );		
 				//move(LINES-1,COLS-1);	/* park cursor		*/
 				refresh();			/* and show it		*/
 				pthread_mutex_unlock(&mx);	/* done with curses	*/
-				collisionGrid[i].row = -1;
-				collisionGrid[i].col = -1;
-				pthread_mutex_unlock(&collision);
 				pthread_mutex_lock(&currentRockets);
 					numRockets += 5;
 				pthread_mutex_unlock(&currentRockets);
 				printInfo();
-				fprintf(logFile, "HIT: %d %d, %d, %d %d\n", myRow, myCol, i, collisionGrid[i].row, collisionGrid[i].col); 
 				return 1;
 			}
 		}
