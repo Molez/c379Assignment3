@@ -5,28 +5,33 @@
 #include	<stdlib.h>
 #include	<unistd.h>
 #include	<string.h>
-#include	<game.h>
-#include	<ship.h>
 #include	<rocket.h>
+#include	<game.h>
+
+/*Lock used for incrementing/decrementing the users rocket count*/
+pthread_mutex_t currentRockets= PTHREAD_MUTEX_INITIALIZER;
+/*Lock used for accessing any of the rocket data structures*/
+pthread_mutex_t rockets = PTHREAD_MUTEX_INITIALIZER; 
 
 /*Variables*/
-int		numRockets;
-pthread_t      	pRockets[MAXROCKETS];	/* The rocket threads		*/
 struct rocket 	rProps[MAXROCKETS];	/* Properties of Rockets	*/
+pthread_t      	pRockets[MAXROCKETS];	/* The rocket threds		*/
+int numRockets = DEFAULTROCKETS;
 
-/**
-*Used to set-up all the variables and structures for rockets
-*/
+/*Function Prototypes*/
+void	       *animateRocket();
+void resetRocket(struct rocket * rocket);
+
 void initRockets(){
-	/*reset all rockets to default*/
+	int i;
+	
+	/*reset all rocklets to default*/
 	for(i=0; i < MAXROCKETS; i++){
 		resetRocket(&rProps[i]);
 	}
-	
-	numRockets = DEFAULTROCKETS;
 }
 
-/*
+/**
 * Sets a rocket struct to default settings
 */
 void resetRocket(struct rocket * rocket){
@@ -38,19 +43,29 @@ void resetRocket(struct rocket * rocket){
 	rocket->alive = -1;
 }
 
+int getNumRockets(){
+	return numRockets;
+}
+
+void decrementRockets(){
+	pthread_mutex_lock(&currentRockets);
+	numRockets--;
+	pthread_mutex_unlock(&currentRockets);
+}
+
 void spawnRocket(){
-int i;
-pthread_mutex_lock(&rockets);
+	int i;
+	pthread_mutex_lock(&rockets);
 		for(i=0; i < MAXROCKETS; i++){
 			if(rProps[i].alive == -1){
 				resetRocket(&rProps[i]);
-				rProps[i].col = turretCol;
+				rProps[i].col = getTurretPosition();
 				pthread_create(&pRockets[i], NULL, animateRocket, &rProps[i]);
 				rProps[i].alive = 1;
 				break;
 			}
 		}
-pthread_mutex_unlock(&rockets);
+	pthread_mutex_unlock(&rockets);
 }
 
 /**
@@ -60,6 +75,7 @@ void *animateRocket(void *arg)
 {
 	struct rocket *info = arg;		/* point to info block	*/
 	int row = LINES - 3;
+	pthread_mutex_t mx = getCursesLock();
 	
 	pthread_mutex_lock(&mx);	/* only one thread	*/
 		   move( row, info->col );	/* can call curses	*/

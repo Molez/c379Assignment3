@@ -1,9 +1,9 @@
-#ifndef SHIP_H
-#define SHIP_H
+#ifndef _SHIP_H_
+#define _SHIP_H_
 
-/*Global Definitions*/
 #define	SAUCER "<--->"		/* The saucer String*/
 #define SAUCER_LEN 5		/*The length of the saucer string*/
+#define MAXSAUCERS 200		/* An Obsurdly large max saucer count*/
 
 struct	saucer{
 	char	str[SAUCER_LEN];	/* the message */
@@ -13,10 +13,8 @@ struct	saucer{
 	int 	alive;	/*Indicates if this saucer is alive*/
 };
 
-/**
-* Function prototypes
-*/
-void	       *animateSaucer();
-void	       *saucerSpawn();
+void initShips();
+void stopAllSaucers();
 void resetSaucer(struct saucer * saucer);
+
 #endif
