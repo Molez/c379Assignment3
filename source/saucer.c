@@ -8,15 +8,18 @@
 
 #define	SAUCER "<--->"		/* The saucer String*/
 #define SAUCER_LEN 5		/*The length of the saucer string*/
-#define ROCKET "^"		/* The Rocket String*/
-#define TURRET "|"		/* The Turret String*/
+#define ROCKET "^"			/* The Rocket String*/
+#define TURRET "|"			/* The Turret String*/
 #define	TUNIT   20000		/* timeunits in microseconds */
 #define MAXSAUCERS 200		/* An Obsurdly large max saucer count*/
 #define MAXROCKETS 200		/* The maximum number of in flight rockets */
-#define	AIRSPACE 8		/* The number of lines at the top that can have saucers in them*/
+#define	AIRSPACE 8			/* The number of lines at the top that can have 
+							saucers in them*/
 #define MAXESCAPED 20		/* Max number of pods that can escape */
 #define DEFAULTROCKETS 30	/* Number of starting Rockets*/
 #define DRAWDELAY 1			/*The refresh delay*/
+#define REFEREEDELAY 2		/*The delay for how often the game referee checks 
+							the game state*/
 
 struct	saucer{
 	char	str[SAUCER_LEN];	/* the message */
@@ -49,10 +52,12 @@ struct saucer 	sProps[MAXSAUCERS];	/* Properties of Saucers	*/
 struct rocket 	rProps[MAXROCKETS];	/* Properties of Rockets	*/
 pthread_t	spawnSaucer;
 pthread_t	drawThread;
+pthread_t	refereeThread;
 int 		turretCol;
 int		numEscapted = 0;
 int		numRockets = DEFAULTROCKETS;
-int killFlag = 0;
+int killFlag = 0; //used to determine if we need to kill user input
+int initFlag = 0; //Used to signify that threads have been initialised
 FILE * logFile;
 
 /*LOCKS*/
@@ -86,8 +91,10 @@ void spawnRocket();
 void printInfo();
 void setup();
 void gameOver();
+void gameStart();
 int checkCollision(int myRow, int myCol);
 void *drawScreen();
+void *gameReferee();
 
 /**
 * Main!
@@ -95,7 +102,7 @@ void *drawScreen();
 int main(int ac, char *av[])
 {
 	int	       c;			/* user input			*/
-	setup();
+	gameStart();
 	//void drawTurret();
 	//pthread_create(&spawnSaucer, NULL, saucerSpawn, NULL);
 	/* process user input */
@@ -103,17 +110,20 @@ int main(int ac, char *av[])
 		c = getch();
 		if ( c == 'Q' ) break;
 		
+		if ( c == 'S' ) {
+			killFlag = 0;
+			setup();
+		}
+		
 		if ( (c == 'a' || c == KEY_LEFT) && (killFlag != 1)){
 			if(turretCol > 1){
 				turretCol = turretCol - 1;
 			}
-			//drawTurret();
 		}
 		if ( (c == 'd' || c == KEY_RIGHT) && (killFlag != 1) ){
 			if(turretCol < (COLS - 1)){
 				turretCol = turretCol + 1;
 			}
-			//drawTurret();
 		}
 		if( c == ' ' && killFlag != 1){
 			if(numRockets > 0){
@@ -126,31 +136,71 @@ int main(int ac, char *av[])
 		}
 	}
 	endwin();
-	fclose(logFile);
+	pthread_cancel(refereeThread);//Kill the referee thread upon leaving
+	if(initFlag == 1){
+		fclose(logFile);
+	}
 	return 0;
 }
+
+/**
+* Handles the game start
+*/
+void gameStart(){
+	killFlag = 1;
+	
+	/* set up curses */
+	initscr();
+	crmode();
+	noecho();
+	clear();
+	keypad(stdscr, TRUE);
+	
+	printInfo(); //Print the updated bottom info
+	
+	move( (LINES / 2)-1, (COLS / 2 - 6));	
+	addstr( "************" );		
+	move( LINES / 2, (COLS / 2 - 6));	
+	addstr( "*GAME START*" );		
+	move( (LINES / 2)+1, (COLS / 2 - 6));	
+	addstr( "************" );		
+	move( (LINES / 2)+2, (COLS / 2 - 6));	
+	addstr( "'S' TO START" );		
+	move(LINES-1,COLS-1);	
+	refresh();		
+
+}
+
+
 /**
 * Handles a game over
 */
 void gameOver(){
 	int i;
-	/* cancel all the threads */
 	killFlag = 1;
-	pthread_cancel(spawnSaucer);
-	pthread_cancel(drawThread);
-	for (i=0; i<MAXSAUCERS; i++ )
-		pthread_cancel(pSaucers[i]);
-	for (i=0; i<MAXROCKETS; i++ )
-		pthread_cancel(pRockets[i]);
+	printInfo(); //Print the updated bottom info
+	if(initFlag == 1){
+		pthread_cancel(spawnSaucer);
+		pthread_cancel(drawThread);
+	}
 	
-	pthread_mutex_lock(&mx);	/* only one thread	*/
-	move( (LINES/2), ((COLS/2) - 5) );	/* can call curses	*/
-	addch(' ');			/* at a the same time	*/
-	addstr( "GAME OVER" );		/* Since I doubt it is	*/
-	addch(' ');			/* reentrant		*/
-	move(LINES-1,COLS-1);	/* park cursor		*/
-	refresh();			/* and show it		*/
-	pthread_mutex_unlock(&mx);	/* done with curses	*/
+	move( (LINES / 2)-1, (COLS / 2 - 6));	
+	addstr( "***********" );		
+	move( LINES / 2, (COLS / 2 - 6));	
+	addstr( "*GAME OVER*" );		
+	move( (LINES / 2)+1, (COLS / 2 - 6));	
+	addstr( "***********" );		
+	move( (LINES / 2)+2, (COLS / 2 - 6));	
+	addstr( "'Q' TO QUIT" );		
+	move(LINES-1,COLS-1);	
+	refresh();
+	
+	if(initFlag == 1){
+		for (i=0; i<MAXSAUCERS; i++ )
+			pthread_cancel(pSaucers[i]);
+		for (i=0; i<MAXROCKETS; i++ )
+			pthread_cancel(pRockets[i]);
+	}
 }
 /**
 * Game set-up
@@ -163,6 +213,7 @@ void setup()
 	
 	pthread_create(&spawnSaucer, NULL, saucerSpawn, NULL);
 	pthread_create(&drawThread, NULL, drawScreen, NULL);
+	pthread_create(&refereeThread, NULL, gameReferee, NULL);
 
 	/*reset all saucers to default (tucked the collision grid in there too)*/
 	for(i=0; i < MAXSAUCERS; i++){
@@ -173,17 +224,11 @@ void setup()
 		resetRocket(&rProps[i]);
 	}
 	
-	/* set up curses */
-	initscr();
-	crmode();
-	noecho();
-	clear();
-	keypad(stdscr, TRUE);
-	
 	turretCol = COLS / 2;
 	
 	printInfo();
 	mvprintw(LINES-2,turretCol,TURRET);
+	initFlag = 1;
 }
 /**
 * Sets a saucer struct to default settings
@@ -351,7 +396,8 @@ void *animateRocket(void *arg)
 */
 void printInfo(){
 	char temp[1024];
-	snprintf(temp, 1024, "Quit: 'Q' | Move: 'a'&'d' | Fire: 'space' | ESCAPED: %d | ROCKETS: %03d", numEscapted, numRockets);
+	snprintf(temp, 1024, "Quit: 'Q' | Move: 'a'&'d' | Fire: 'space' | "
+	"ESCAPED: %d | ROCKETS: %03d", numEscapted, numRockets);
 	pthread_mutex_lock(&mx);	/* only one thread	*/
 	move( LINES -1, 0 );	/* can call curses	*/
 	addstr( temp );		
@@ -417,9 +463,34 @@ void *drawScreen()
 		move(LINES-1,COLS-1);	/* park cursor		*/
 		refresh();	
 		pthread_mutex_unlock(&mx);
+		//These draw functions draw on their own
 		printInfo(); //Print the bottom info
 		drawTurret(); //Draw the turret
 	}
+}
+
+void *gameReferee(){
+	int gameOverFlag;
+	int i;
+	while(1){
+		usleep(REFEREEDELAY*TUNIT);
+		gameOverFlag = 0;
+		if(numRockets <= 0){
+			gameOverFlag = 1;
+			for(i=0; i < MAXROCKETS; i++){
+				if(rProps[i].alive == 1){
+					gameOverFlag = 0;
+					break;
+				}
+			}
+		}
+		if(gameOverFlag == 1){
+			fprintf(logFile, "Rockets Trigger game over\n");
+			gameOver();
+		}
+	}
+
+
 }
 
 
