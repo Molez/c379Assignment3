@@ -20,22 +20,24 @@
 #define MAXROCKETS 100		/* The maximum number of in flight rockets */
 #define MAXREWARDS 100		/* The maximum number of in flight rewards */
 #define DRAWDELAY 1			/*The refresh delay*/
-#define REFEREEDELAY 2		/*The delay for how often the game referee checks 
-							the game state*/
+#define REFEREEDELAY 2		/*The delay for how often the game referee
+				checks the game state*/
 /******************************************************************************/
 /*These are game settings that can be adjusted to change the game play*/
-#define	AIRSPACE 8			/* The number of lines at the top that can have 
-							saucers in them*/
+#define	AIRSPACE 8			/* The number of lines at the top that 
+					can have saucers in them*/
 #define MAXESCAPED 20		/* Max number of pods that can escape */
 #define DEFAULTROCKETS 30	/* Number of starting Rockets*/
 #define REWARDDELAY  8  	/* How fast rewards move down the screen */
-#define ROCKETDELAYSLOW  3  /* The slow speed of rockets*/
-#define ROCKETDELAYFAST  1  /* The fast speed of rockets*/
-#define	SPEEDUPCHANCE	 5	/* This is used to set the % chance we get a speedup
-							from a reward. Chance for speedup is 1/SPEEDUPCHANCE
-							*/
-#define	REWARDCHANCE	3	/* This is used to set the % chance we get a reward
-							from a kill. Chance for reward is 1/REWARDCHANCE*/
+#define ROCKETDELAYSLOW  3  	/* The slow speed of rockets*/
+#define ROCKETDELAYFAST  1  	/* The fast speed of rockets*/
+#define	SPEEDUPCHANCE	 5	/* This is used to set the % chance we get a 
+				speedupfrom a reward. Chance for speedup is 
+				1/SPEEDUPCHANCE
+				*/
+#define	REWARDCHANCE	3	/* This is used to set the % chance we get a 
+				rewardfrom a kill. Chance for reward is 
+				1/REWARDCHANCE*/
 /******************************************************************************/
 /*True/false defines do not touch these!*/
 #define	True			1
@@ -80,7 +82,7 @@ pthread_t      	pRockets[MAXROCKETS];	/* The rocket threads	*/
 pthread_t      	pRewards[MAXROCKETS];	/* The rocket threads	*/
 struct saucer 	sProps[MAXSAUCERS];	/* Properties of Saucers	*/
 struct rocket 	rProps[MAXROCKETS];	/* Properties of Rockets	*/
-struct rocket 	rewardProps[MAXROCKETS];	/* Properties of Rewards	*/
+struct rocket 	rewardProps[MAXROCKETS];	/* Properties of Rewards*/
 pthread_t		spawnSaucer;
 pthread_t		drawThread;
 pthread_t		refereeThread;
@@ -90,9 +92,10 @@ int 			turretCol2p = -1;
 int				numEscapted = 0;
 int				numRockets = DEFAULTROCKETS;
 int				points = 0;
-int 			killFlag = 0;/*used to determine if we need to kill user input*/
-int 			initFlag =0;/*Used to signify that threads have been 
-				initialised*/
+int 			killFlag = 0;	/*used to determine if we need to kill 
+					user input*/
+int 			initFlag =0;	/*Used to signify that threads have been 
+					initialised*/
 int 			secondPlayer = 0; /*Flag for second player*/
 
 /*LOCKS*/
@@ -121,10 +124,10 @@ pthread_mutex_t currentPoints= PTHREAD_MUTEX_INITIALIZER;
 void 			resetSaucer(struct saucer * saucer);
 void 			resetRocket(struct rocket * rocket);
 void 			resetReward(struct rocket * rocket);
-void	       	*animateSaucer(void *arg);
-void	       	*animateRocket(void *arg);
+void	       		*animateSaucer(void *arg);
+void	       		*animateRocket(void *arg);
 void 			*animateReward(void *arg);
-void	       	*saucerSpawn();
+void	       		*saucerSpawn();
 void 			drawTurret();
 void 			spawnRocket();
 void 			spawnReward(int myCol, int myRow);
@@ -380,8 +383,8 @@ void *animateSaucer(void *arg)
 			}
 			pthread_exit(NULL);
 		}
-		/*Used to dynamically shrink the print string as we hit the end of the
-		screen in order to ensure no wrap around*/
+		/*Used to dynamically shrink the print string as we 
+		hit the end of the screen in order to ensure no wrap around*/
 		if(info->col + len >= COLS){
 			pthread_mutex_lock(&saucers);
 			info->str[len-1] = '\0';
@@ -402,7 +405,8 @@ void *saucerSpawn(){
 		for(i=0; i < MAXSAUCERS; i++){
 			if(sProps[i].alive == -1){
 				resetSaucer(&sProps[i]);
-				pthread_create(&pSaucers[i], NULL, animateSaucer, &sProps[i]);
+				pthread_create(&pSaucers[i], NULL, 
+				animateSaucer, &sProps[i]);
 				sProps[i].alive = TRUE;
 				break;
 			}
@@ -437,19 +441,21 @@ void drawTurret(){
 void spawnRocket(int player){
 int i;
 pthread_mutex_lock(&rockets);
-		for(i=0; i < MAXROCKETS; i++){
-			if(rProps[i].alive == -1){
-				resetRocket(&rProps[i]);
-				if(player ==1){
-					rProps[i].col = turretCol;
-				}else{
-					rProps[i].col = turretCol2p;
-				}
-				pthread_create(&pRockets[i], NULL, animateRocket, &rProps[i]);
-				rProps[i].alive = TRUE;
-				break;
+	/*Find a free rocket struct*/
+	for(i=0; i < MAXROCKETS; i++){
+		if(rProps[i].alive == -1){
+			resetRocket(&rProps[i]);
+			if(player ==1){
+				rProps[i].col = turretCol;
+			}else{
+				rProps[i].col = turretCol2p;
 			}
+			pthread_create(&pRockets[i], NULL, 
+			animateRocket, &rProps[i]);
+			rProps[i].alive = TRUE;
+			break;
 		}
+	}
 pthread_mutex_unlock(&rockets);
 }
 
@@ -459,19 +465,18 @@ pthread_mutex_unlock(&rockets);
 void spawnReward(int myCol, int myRow){
 int i;
 pthread_mutex_lock(&reward);
-		for(i=0; i < MAXREWARDS; i++){
-			if(rewardProps[i].alive == -1){
-				resetReward(&rewardProps[i]);
-				rewardProps[i].col = myCol;
-				rewardProps[i].row = myRow;
-				
-				pthread_create(&pRewards[i], NULL, animateReward, 
-				&rewardProps[i]);
-				
-				rewardProps[i].alive = TRUE;
-				break;
-			}
+	/*Find a free reward Struct*/
+	for(i=0; i < MAXREWARDS; i++){
+		if(rewardProps[i].alive == -1){
+			resetReward(&rewardProps[i]);
+			rewardProps[i].col = myCol;
+			rewardProps[i].row = myRow;	
+			pthread_create(&pRewards[i], NULL, 
+			animateReward, &rewardProps[i]);	
+			rewardProps[i].alive = TRUE;
+			break;
 		}
+	}
 pthread_mutex_unlock(&reward);
 }
 
@@ -566,13 +571,13 @@ void *animateReward(void *arg)
 */
 void printInfo(){
 	char temp[1024];
-	snprintf(temp, 1024, "Quit: 'Q' | Move: 'a'&'d' | Fire: 'space' | "
+	snprintf(temp, 1024, "Quit: 'Q' | "
 	"ESCAPED: %d | ROCKETS: %03d | POINTS: %04d ", numEscapted, numRockets, 
 	points);
 	pthread_mutex_lock(&mx);	/* only one thread	*/
-	move( LINES -1, 0 );	/* can call curses	*/
+	move( LINES -1, 0 );		/* can call curses	*/
 	addstr( temp );		
-	move(LINES-1,COLS-1);	/* park cursor		*/
+	move(LINES-1,COLS-1);		/* park cursor		*/
 	refresh();			/* and show it		*/
 	pthread_mutex_unlock(&mx);	/* done with curses	*/
 }
@@ -584,7 +589,7 @@ int checkCollision(int myRow, int myCol){
 	int i;
 	for(i=0; i<MAXSAUCERS;i++){
 		if(sProps[i].row == myRow && sProps[i].alive != -1){
-			if((myCol >= sProps[i].col) && (myCol <= (sProps[i].col + 
+			if((myCol >= sProps[i].col) && (myCol <= (sProps[i].col+ 
 			SAUCER_LEN))){
 				pthread_mutex_lock(&saucers);
 				sProps[i].die = 1;
