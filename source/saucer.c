@@ -572,7 +572,7 @@ void *animateReward(void *arg)
 void printInfo(){
 	char temp[1024];
 	snprintf(temp, 1024, "Quit: 'Q' | "
-	"ESCAPED: %d | ROCKETS: %03d | POINTS: %04d ", numEscapted, numRockets, 
+	"ESCAPED: %d/%d | ROCKETS: %03d | POINTS: %04d ", numEscapted, MAXESCAPED, numRockets, 
 	points);
 	pthread_mutex_lock(&mx);	/* only one thread	*/
 	move( LINES -1, 0 );		/* can call curses	*/
