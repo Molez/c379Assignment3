@@ -20,13 +20,8 @@
 #define MAXROCKETS 100		/* The maximum number of in flight rockets */
 #define MAXREWARDS 100		/* The maximum number of in flight rewards */
 #define DRAWDELAY 1			/*The refresh delay*/
-/******************************************************************************/
-/*The various delay settings for things in the game*/
 #define REFEREEDELAY 2		/*The delay for how often the game referee checks 
 							the game state*/
-#define REFEREEDELAY 2		/*The delay for how often the game referee checks 
-							the game state*/
-#define REWARDDELAY  8  	/* How fast rewards move down the screen */
 /******************************************************************************/
 /*These are game settings that can be adjusted to change the game play*/
 #define	AIRSPACE 8			/* The number of lines at the top that can have 
@@ -46,7 +41,9 @@
 #define	True			1
 #define	FALSE			0
 /******************************************************************************/
-
+/**
+*	Stores information for one saucer
+*/
 struct	saucer{
 	char	str[SAUCER_LEN];	/* the message */
 	int	row;	/* the row     */
@@ -55,7 +52,9 @@ struct	saucer{
 	int 	alive;	/*Indicates if this saucer is alive*/
 	int 	die;
 };
-
+/**
+*	Stores information for one rocket
+*/
 struct rocket{
 	char *str;	/*The rocket String*/
 	int row;	/*The row*/
@@ -64,7 +63,9 @@ struct rocket{
 	int dir;	/* +1 or -1*/
 	int alive;	/*Indicates if this rocket is alive*/
 };
-
+/**
+*	Stores information for one reward
+*/
 struct reward{
 	char *str;	/*The reward String*/
 	int row;	/*The row*/
@@ -72,11 +73,6 @@ struct reward{
 	int delay;	/*The Speed of the rocket*/
 	int dir;	/* +1 or -1*/
 	int alive;	/*Indicates if this reward is alive*/
-};
-
-struct gridPoint{
-	int row;
-	int col;
 };
 
 pthread_t      	pSaucers[MAXSAUCERS];	/* The saucer threads	*/
@@ -98,7 +94,6 @@ int 			killFlag = 0;/*used to determine if we need to kill user input*/
 int 			initFlag =0;/*Used to signify that threads have been 
 				initialised*/
 int 			secondPlayer = 0; /*Flag for second player*/
-FILE * 			logFile;
 
 /*LOCKS*/
 /*-------------------------------------------------------------------*/
@@ -208,9 +203,6 @@ int main(int argc, char *argv[])
 	}
 	endwin();
 	pthread_cancel(refereeThread);/*Kill the referee thread upon leaving*/
-	if(initFlag == 1){
-		fclose(logFile);
-	}
 	return 0;
 }
 
@@ -281,15 +273,13 @@ void setup()
 {
 	int i;
 	
-	logFile = fopen("log.txt", "w+");
-	
 	pthread_create(&spawnSaucer, NULL, saucerSpawn, NULL);
 	pthread_create(&drawThread, NULL, drawScreen, NULL);
 	pthread_create(&refereeThread, NULL, gameReferee, NULL);
 	
 	rocketDelay = ROCKETDELAYSLOW;
 
-	/*reset all saucers to default (tucked the collision grid in there too)*/
+	/*reset all saucers to default*/
 	for(i=0; i < MAXSAUCERS; i++){
 		resetSaucer(&sProps[i]);
 	}
@@ -509,7 +499,9 @@ void *animateRocket(void *arg)
 			pthread_exit(NULL);
 		}
 		/* move item to next column and check for bouncing	*/
+		pthread_mutex_lock(&rockets);
 		info->row += info->dir;
+		pthread_mutex_unlock(&rockets);
 
 		if(info->row < 0){
 			pthread_mutex_lock(&rockets);
@@ -557,7 +549,9 @@ void *animateReward(void *arg)
 			pthread_exit(NULL);
 		}
 		/* move item to next column and check for bouncing	*/
+		pthread_mutex_lock(&reward);
 		info->row += info->dir;
+		pthread_mutex_unlock(&reward);
 
 		if(info->row > LINES -1){
 			pthread_mutex_lock(&reward);
@@ -606,7 +600,6 @@ int checkCollision(int myRow, int myCol){
 			}
 		}
 	}
-	fprintf(logFile, "%d %d\n", myRow, myCol); 
 	return 0;
 }
 
